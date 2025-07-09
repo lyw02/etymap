@@ -1,5 +1,11 @@
 import { useState, useEffect } from "react";
-import "./App.css";
+import Canvas from "./components/Canvas";
+import type { GraphNode } from "./types";
+
+const graph: GraphNode[] = [
+  { label: "Latin", outEdges: [{ label: "English", outEdges: [] }] },
+  { label: "English", outEdges: [] },
+];
 
 function App() {
   const [headword, setHeadword] = useState("");
@@ -41,10 +47,11 @@ function App() {
   }, []);
 
   return (
-    <div className="App">
+    <div className="max-w-[1280px] p-8 m-auto">
       <h1>{headword}</h1>
       <p>{partsOfSpeech}</p>
-      {etymologyText}
+      {/* {etymologyText} */}
+      <Canvas graph={graph} />
     </div>
   );
 }
