@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Etymap",
+  "version": "1.0.0",
+  "description": "A Chrome extension for English etymology visualisation.",
+  "permissions": ["storage", "activeTab"],
+  "action": {
+    "default_popup": "index.html",
+    "default_icon": {
+      "16": "src/assets/icon-16.png",
+      "32": "src/assets/icon-32.png",
+      "48": "src/assets/icon-48.png",
+      "128": "src/assets/icon-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/background/index.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.oed.com/dictionary/*",
+        "https://www.etymonline.com/word/*"
+      ],
+      "js": ["src/content/index.ts"]
+    }
+  ],
+  "icons": {
+    "16": "src/assets/icon-16.png",
+    "32": "src/assets/icon-32.png",
+    "48": "src/assets/icon-48.png",
+    "128": "src/assets/icon-128.png"
+  }
+}
