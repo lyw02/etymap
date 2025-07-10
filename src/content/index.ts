@@ -1,12 +1,13 @@
 import "./highlight.css";
 
 const currentUrl = window.location.href;
+const isOed = currentUrl.startsWith("https://www.oed.com/dictionary/");
 
 let headword = "";
 let partsOfSpeech = "";
 const allFoundTexts: string[] = [];
 
-if (currentUrl.startsWith("https://www.oed.com/dictionary/")) {
+if (isOed) {
   // Find target elements on page
   const headwordClass = "headword";
   const partsOfSpeechClass = ".headword-parts-of-speech .part-of-speech";
