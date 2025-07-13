@@ -1,19 +1,27 @@
 import { useState, useEffect } from "react";
 import Canvas from "./components/Canvas";
-import type { GrapgEdge, GraphNode } from "./utils/types";
+import { GraphNode, GraphEdge } from "./utils/graph.types";
 
-const graphNodes: GraphNode[] = [
+const graphNodeData = [
   { label: "PIE" },
   { label: "Latin" },
   { label: "French" },
   { label: "English" },
 ];
 
-const graphEdges: GrapgEdge[] = [
+const graphEdgeData: GraphEdge[] = [
   { source: "PIE", target: "Latin" },
   { source: "Latin", target: "English" },
   { source: "French", target: "English" },
 ];
+
+const graphNodes: GraphNode[] = graphNodeData.map(
+  (item) => new GraphNode(item.label)
+);
+
+const graphEdges: GraphEdge[] = graphEdgeData.map(
+  (item) => new GraphEdge(item.source, item.target)
+);
 
 function App() {
   const [isOed, setIsOed] = useState(false);

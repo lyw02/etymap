@@ -1,82 +1,32 @@
 import { useEffect, useRef } from "react";
-import type { GrapgEdge, GraphNode } from "../utils/types";
-
-// Internal node type for the algorithm
-interface ProcessedNode {
-  id: string; // Use label as ID
-  label: string;
-  x: number;
-  y: number;
-  layer: number;
-  isDummy: boolean;
-  inEdges: ProcessedEdge[];
-  outEdges: ProcessedEdge[];
-}
-
-// Internal edge type for the algorithm
-interface ProcessedEdge {
-  id: string;
-  source: string; // source node ID
-  target: string; // target node ID
-}
-
-// class ProcessedNode implements ProcessedNode {
-//   id: string; // Use label as ID
-//   label: string;
-//   x: number;
-//   y: number;
-//   layer: number;
-//   isDummy: boolean;
-//   inEdges: ProcessedEdge[];
-//   outEdges: ProcessedEdge[];
-//   constructor({
-//     id,
-//     label,
-//     x,
-//     y,
-//     layer,
-//     isDummy,
-//     inEdges,
-//     outEdges,
-//   }: {
-//     id: string;
-//     label: string;
-//     x: number;
-//     y: number;
-//     layer: number;
-//     isDummy: boolean;
-//     inEdges: ProcessedEdge[];
-//     outEdges: ProcessedEdge[];
-//   }) {
-//     this.id = id;
-//     this.label = label;
-//     this.x = x;
-//     this.y = y;
-//     this.layer = layer;
-//     this.isDummy = isDummy;
-//     this.inEdges = inEdges;
-//     this.outEdges = outEdges;
-//   }
-// }
-// class ProcessedEdge implements ProcessedEdge {}
+import {
+  GraphNode,
+  GraphEdge,
+  ProcessedNode,
+  ProcessedEdge,
+} from "../utils/graph.types";
+import { drawRectWithText } from "../utils/canvas-utils";
 
 const LAYER_SPACING = 260; // x-axis spacing between layers
 const NODE_SPACING = 190; // y-axis spacing between nodes in a layer
 
 function transformGraph(
   graphNodes: GraphNode[],
-  graphEdges: GrapgEdge[]
+  graphEdges: GraphEdge[]
 ): { nodes: ProcessedNode[]; edges: ProcessedEdge[] } {
-  const nodes: ProcessedNode[] = graphNodes.map((n) => ({
-    id: n.label, // Use the unique label as the ID
-    label: n.label,
-    x: 0,
-    y: 0,
-    layer: -1,
-    isDummy: false,
-    inEdges: [],
-    outEdges: [],
-  }));
+  const nodes: ProcessedNode[] = graphNodes.map(
+    (n) =>
+      new ProcessedNode({
+        id: n.label, // Use the unique label as the ID
+        label: n.label,
+        x: 0,
+        y: 0,
+        layer: -1,
+        isDummy: false,
+        inEdges: [],
+        outEdges: [],
+      })
+  );
 
   const nodeMap = new Map<string, ProcessedNode>(nodes.map((n) => [n.id, n]));
 
@@ -85,11 +35,11 @@ function transformGraph(
       const sourceNode = nodeMap.get(edge.source);
       const targetNode = nodeMap.get(edge.target);
 
-      const processedEdge: ProcessedEdge = {
+      const processedEdge = new ProcessedEdge({
         id: `e-${edge.source}-${edge.target}-${i}`, // Add index to ensure unique edge IDs
         source: edge.source,
         target: edge.target,
-      };
+      });
 
       if (sourceNode && targetNode) {
         sourceNode.outEdges.push(processedEdge);
@@ -163,7 +113,7 @@ function addDummyNodes(
       edgesToRemove.add(edge.id);
       let current = sourceNode;
       for (let i = 1; i < layerDiff; i++) {
-        const dummy: ProcessedNode = {
+        const dummy: ProcessedNode = new ProcessedNode({
           id: `dummy_${dummyCount++}`,
           label: "",
           x: 0,
@@ -172,24 +122,24 @@ function addDummyNodes(
           isDummy: true,
           inEdges: [],
           outEdges: [],
-        };
+        });
         dummyNodes.push(dummy);
         if (!layers[dummy.layer]) layers[dummy.layer] = [];
         layers[dummy.layer].push(dummy);
 
-        const newEdge = {
+        const newEdge = new ProcessedEdge({
           id: `${current.id}->${dummy.id}`,
           source: current.id,
           target: dummy.id,
-        };
+        });
         edgesToAdd.push(newEdge);
         current = dummy;
       }
-      const finalEdge = {
+      const finalEdge = new ProcessedEdge({
         id: `${current.id}->${targetNode.id}`,
         source: current.id,
         target: targetNode.id,
-      };
+      });
       edgesToAdd.push(finalEdge);
     }
   }
@@ -247,202 +197,57 @@ function draw(
   const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
   edges.forEach((edge) => {
-    drawEdge(ctx, nodeMap, edge);
+    edge.draw(ctx, nodeMap, edge);
   });
 
   nodes.forEach((node) => {
-    drawNode(ctx, node);
+    if (!node.isDummy) node.draw(ctx, node);
   });
 }
 
-function drawEdge(
-  ctx: CanvasRenderingContext2D,
-  nodeMap: Map<string, ProcessedNode>,
-  edge: ProcessedEdge
+function handleMouseMove(
+  e: React.MouseEvent<HTMLCanvasElement, MouseEvent>,
+  canvasRef: React.RefObject<HTMLCanvasElement | null>,
+  ctxRef: React.RefObject<CanvasRenderingContext2D | null>,
+  nodesRef: React.RefObject<ProcessedNode[] | null>
 ) {
-  // 为线条和箭头设置样式
-  ctx.strokeStyle = "#9ca3af";
-  ctx.lineWidth = 3;
-  // 为实心箭头设置填充颜色
-  ctx.fillStyle = "#9ca3af";
+  if (!canvasRef.current || !ctxRef.current || !nodesRef.current) return;
 
-  const sourceNode = nodeMap.get(edge.source)!;
-  const targetNode = nodeMap.get(edge.target)!;
+  const x = e.nativeEvent.offsetX;
+  const y = e.nativeEvent.offsetY;
 
-  // 1. 定义贝塞尔曲线的四个点
-  const p0 = { x: sourceNode.x, y: sourceNode.y }; // 起点
-  const cp1x = (sourceNode.x + targetNode.x) / 2; // 控制点1的X坐标
-  const p1 = { x: cp1x, y: sourceNode.y }; // 控制点1
-  const p2 = { x: cp1x, y: targetNode.y }; // 控制点2
-  const p3 = { x: targetNode.x, y: targetNode.y }; // 终点
-
-  // 2. 绘制贝塞尔曲线
-  ctx.beginPath();
-  ctx.moveTo(p0.x, p0.y);
-  ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y);
-  ctx.stroke();
-
-  // 3. 计算曲线中点 (t=0.5) 的坐标
-  const t = 0.5;
-  const midX =
-    (1 - t) ** 3 * p0.x +
-    3 * (1 - t) ** 2 * t * p1.x +
-    3 * (1 - t) * t ** 2 * p2.x +
-    t ** 3 * p3.x;
-  const midY =
-    (1 - t) ** 3 * p0.y +
-    3 * (1 - t) ** 2 * t * p1.y +
-    3 * (1 - t) * t ** 2 * p2.y +
-    t ** 3 * p3.y;
-
-  // 4. 计算曲线中点的切线方向（导数）
-  const dx =
-    3 * (1 - t) ** 2 * (p1.x - p0.x) +
-    6 * (1 - t) * t * (p2.x - p1.x) +
-    3 * t ** 2 * (p3.x - p2.x);
-  const dy =
-    3 * (1 - t) ** 2 * (p1.y - p0.y) +
-    6 * (1 - t) * t * (p2.y - p1.y) +
-    3 * t ** 2 * (p3.y - p2.y);
-
-  // 5. 根据切线计算旋转角度
-  const angle = Math.atan2(dy, dx);
-
-  // 6. 绘制实心箭头
-  ctx.save(); // 保存当前画布状态
-  ctx.translate(midX, midY); // 将画布原点移动到曲线中点
-  ctx.rotate(angle); // 旋转画布以匹配切线方向
-  ctx.beginPath(); // 开始绘制箭头路径
-
-  // 绘制一个三角形作为箭头，箭头尖端在 (0,0)
-  ctx.moveTo(0, 0);
-  ctx.lineTo(-12, -6); // 箭头的后端点1（可调整大小）
-  ctx.lineTo(-12, 6); // 箭头的后端点2
-
-  ctx.closePath(); // 闭合路径形成一个封闭的三角形
-  ctx.fill(); // 填充路径，形成实心箭头
-  ctx.restore(); // 恢复之前保存的画布状态
-}
-
-function drawNode(ctx: CanvasRenderingContext2D, node: ProcessedNode) {
-  if (node.isDummy) return;
-
-  drawTextWithAutoSizeRect(ctx, node.label, node.x, node.y)
-}
-
-function drawTextWithAutoSizeRect(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  x: number, // center x
-  y: number, // center y
-  options = {}
-) {
-  ctx.save();
-
-  // --- 设置默认值和配置 ---
-  const config = {
-    maxWidth: 100,
-    padding: 15,
-    font: "16px sans-serif",
-    lineHeightRatio: 1.4,
-    textColor: "#111827",
-    bgColor: "#e5e7eb",
-    borderRadius: 8,
-    ...options,
-  };
-
-  // 应用字体设置，这对于准确测量至关重要
-  ctx.font = config.font;
-
-  // 高度测量比较复杂，一个简便且有效的方法是直接使用字体大小
-  // 'actualBoundingBoxAscent' 和 'actualBoundingBoxDescent' 可以提供更精确的高度，但为了简单起见，我们用字体大小
-  const fontHeight = parseInt(config.font, 10);
-  const lineHeight = fontHeight * config.lineHeightRatio;
-
-  // --- 处理文本换行（核心逻辑） ---
-  const lines = [];
-  const paragraphs = text.split("\n"); // 首先按用户指定的换行符分割
-
-  for (const paragraph of paragraphs) {
-    const words = paragraph.split(" ");
-    let currentLine = words[0] || "";
-
-    for (let i = 1; i < words.length; i++) {
-      const word = words[i];
-      const testLine = currentLine + " " + word;
-      const testWidth = ctx.measureText(testLine).width; // 测量文字尺寸，实现自适应的核心方法
-
-      if (testWidth > config.maxWidth && currentLine.length > 0) {
-        lines.push(currentLine);
-        currentLine = word;
-      } else {
-        currentLine = testLine;
-      }
-    }
-    lines.push(currentLine);
-  }
-
-  // --- 计算整体尺寸 ---
-  // 找到最长的一行来确定矩形宽度
-  let maxTextWidth = 0;
-  for (const line of lines) {
-    const lineWidth = ctx.measureText(line).width;
-    if (lineWidth > maxTextWidth) {
-      maxTextWidth = lineWidth;
+  let hoveredNode = null;
+  // 从上到下遍历节点，找到第一个被悬停的
+  for (const node of nodesRef.current) {
+    if (!node.isDummy && node.isHovered(x, y)) {
+      hoveredNode = node;
+      break;
     }
   }
 
-  const rectWidth = maxTextWidth + config.padding * 2;
-  const rectHeight = lines.length * lineHeight + config.padding * 2;
-
-  // --- 计算矩形左上角坐标（根据中心点）---
-  const rectX = x - rectWidth / 2;
-  const rectY = y - rectHeight / 2;
-
-  // --- 绘制带圆角的背景矩形 ---
-  ctx.fillStyle = config.bgColor;
-  ctx.beginPath();
-  ctx.moveTo(rectX + config.borderRadius, rectY);
-  ctx.lineTo(rectX + rectWidth - config.borderRadius, rectY);
-  ctx.quadraticCurveTo(
-    rectX + rectWidth,
-    rectY,
-    rectX + rectWidth,
-    rectY + config.borderRadius
+  ctxRef.current.clearRect(
+    0,
+    0,
+    canvasRef.current.width,
+    canvasRef.current.height
   );
-  ctx.lineTo(rectX + rectWidth, rectY + rectHeight - config.borderRadius);
-  ctx.quadraticCurveTo(
-    rectX + rectWidth,
-    rectY + rectHeight,
-    rectX + rectWidth - config.borderRadius,
-    rectY + rectHeight
-  );
-  ctx.lineTo(rectX + config.borderRadius, rectY + rectHeight);
-  ctx.quadraticCurveTo(
-    rectX,
-    rectY + rectHeight,
-    rectX,
-    rectY + rectHeight - config.borderRadius
-  );
-  ctx.lineTo(rectX, rectY + config.borderRadius);
-  ctx.quadraticCurveTo(rectX, rectY, rectX + config.borderRadius, rectY);
-  ctx.closePath();
-  ctx.fill();
 
-  // --- 6. 逐行绘制文字 ---
-  ctx.fillStyle = config.textColor;
-  ctx.textBaseline = "top"; // 基线设置为顶部，方便计算
-
-  const initialTextY = rectY + config.padding;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const textX = rectX + config.padding;
-    // 每行的 Y 坐标 = 初始Y + 行数 * 行高
-    const textY = initialTextY + i * lineHeight;
-    ctx.fillText(line, textX, textY);
+  if (hoveredNode) {
+    const tooltipText = `节点信息: ${hoveredNode.label}`;
+    // 在鼠标指针右下方绘制浮窗
+    drawRectWithText(ctxRef.current, tooltipText, x + 50, y + 15);
   }
+}
 
-  ctx.restore();
+function handleMouseLeave(
+  canvasRef: React.RefObject<HTMLCanvasElement | null>,
+  ctxRef: React.RefObject<CanvasRenderingContext2D | null>
+) {
+  const canvas = canvasRef.current;
+  const ctx = ctxRef.current;
+  if (ctx && canvas) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
 }
 
 function Canvas({
@@ -450,20 +255,29 @@ function Canvas({
   graphEdges,
 }: {
   graphNodes: GraphNode[];
-  graphEdges: GrapgEdge[];
+  graphEdges: GraphEdge[];
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasLayer2Ref = useRef<HTMLCanvasElement>(null);
+  // const ctxRef = useRef<CanvasRenderingContext2D>(null);
+  const ctxLayer2Ref = useRef<CanvasRenderingContext2D>(null);
+  const nodesRef = useRef<ProcessedNode[]>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const canvasLayer2 = canvasLayer2Ref.current;
+    if (!canvas || !canvasLayer2) return;
 
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const ctxLayer2 = canvasLayer2.getContext("2d");
+    if (!ctx || !ctxLayer2) return;
+    ctxLayer2Ref.current = ctxLayer2;
 
     const dpr = window.devicePixelRatio || 1;
     canvas.width = 800 * dpr;
     canvas.height = 500 * dpr;
+    canvasLayer2.width = 800 * dpr;
+    canvasLayer2.height = 500 * dpr;
 
     let { nodes, edges } = transformGraph(graphNodes, graphEdges);
     const layers = assignLayers(nodes);
@@ -471,13 +285,21 @@ function Canvas({
     assignCoordinates(layers, canvas.width, canvas.height);
     draw(ctx, nodes, edges);
 
-    // ctx.fillStyle = "yellow";
-    // ctx.fillRect(0, 0, canvas.width, canvas.height);
+    nodesRef.current = nodes;
   }, []);
 
   return (
-    <div className="w-[1000px] h-[500px]">
-      <canvas ref={canvasRef}></canvas>
+    <div className="relative w-[1000px] h-[500px] bg-gray-50 rounded-lg overflow-hidden shadow-lg">
+      <canvas
+        id="layer-2"
+        className="absolute top-0 left-0 z-20"
+        ref={canvasLayer2Ref}
+        onMouseMove={(e) =>
+          handleMouseMove(e, canvasLayer2Ref, ctxLayer2Ref, nodesRef)
+        }
+        onMouseLeave={() => handleMouseLeave(canvasLayer2Ref, ctxLayer2Ref)}
+      />
+      <canvas id="layer-1" className="absolute top-0 left-0" ref={canvasRef} />
     </div>
   );
 }
