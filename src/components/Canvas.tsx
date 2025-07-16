@@ -164,8 +164,56 @@ function addDummyNodes(
 }
 
 /**
- * 阶段3: 分配坐标
- * Phase 3: Coordinate Assignment
+ * 阶段3: 减少交叉 (重心启发式算法)
+ * Phase 3: Crossing Reduction (Barycenter Heuristic)
+ */
+function reduceCrossings(layers: ProcessedNode[][]) {
+  const nodeMap = new Map(layers.flat().map((n) => [n.id, n]));
+
+  for (let iter = 0; iter < 24; iter++) {
+    // More iterations for better result
+    for (let i = 1; i < layers.length; i++) {
+      // Downward pass
+      layers[i].sort((a, b) => {
+        const aCenter =
+          a.inEdges.reduce(
+            (sum, e) =>
+              sum + layers[a.layer - 1].indexOf(nodeMap.get(e.source)!),
+            0
+          ) / (a.inEdges.length || 1);
+        const bCenter =
+          b.inEdges.reduce(
+            (sum, e) =>
+              sum + layers[b.layer - 1].indexOf(nodeMap.get(e.source)!),
+            0
+          ) / (b.inEdges.length || 1);
+        return aCenter - bCenter;
+      });
+    }
+    for (let i = layers.length - 2; i >= 0; i--) {
+      // Upward pass
+      layers[i].sort((a, b) => {
+        const aCenter =
+          a.outEdges.reduce(
+            (sum, e) =>
+              sum + layers[a.layer + 1].indexOf(nodeMap.get(e.target)!),
+            0
+          ) / (a.outEdges.length || 1);
+        const bCenter =
+          b.outEdges.reduce(
+            (sum, e) =>
+              sum + layers[b.layer + 1].indexOf(nodeMap.get(e.target)!),
+            0
+          ) / (b.outEdges.length || 1);
+        return aCenter - bCenter;
+      });
+    }
+  }
+}
+
+/**
+ * 阶段4: 分配坐标
+ * Phase 4: Coordinate Assignment
  */
 function assignCoordinates(
   layers: ProcessedNode[][],
@@ -282,6 +330,7 @@ function Canvas({
     let { nodes, edges } = transformGraph(graphNodes, graphEdges);
     const layers = assignLayers(nodes);
     edges = addDummyNodes(layers, nodes, edges);
+    reduceCrossings(layers);
     assignCoordinates(layers, canvas.width, canvas.height);
     draw(ctx, nodes, edges);
 

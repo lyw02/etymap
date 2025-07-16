@@ -63,42 +63,12 @@ function drawRectWithText(
   const rectWidth = maxTextWidth + config.padding * 2;
   const rectHeight = lines.length * lineHeight + config.padding * 2;
 
-  // this.nodeWidth = rectWidth;
-  // this.nodeHeight = rectHeight;
-
   // --- 计算矩形左上角坐标（根据中心点）---
   const rectX = x - rectWidth / 2;
   const rectY = y - rectHeight / 2;
 
   // --- 绘制带圆角的背景矩形 ---
-  ctx.fillStyle = config.bgColor;
-  ctx.beginPath();
-  ctx.moveTo(rectX + config.borderRadius, rectY);
-  ctx.lineTo(rectX + rectWidth - config.borderRadius, rectY);
-  ctx.quadraticCurveTo(
-    rectX + rectWidth,
-    rectY,
-    rectX + rectWidth,
-    rectY + config.borderRadius
-  );
-  ctx.lineTo(rectX + rectWidth, rectY + rectHeight - config.borderRadius);
-  ctx.quadraticCurveTo(
-    rectX + rectWidth,
-    rectY + rectHeight,
-    rectX + rectWidth - config.borderRadius,
-    rectY + rectHeight
-  );
-  ctx.lineTo(rectX + config.borderRadius, rectY + rectHeight);
-  ctx.quadraticCurveTo(
-    rectX,
-    rectY + rectHeight,
-    rectX,
-    rectY + rectHeight - config.borderRadius
-  );
-  ctx.lineTo(rectX, rectY + config.borderRadius);
-  ctx.quadraticCurveTo(rectX, rectY, rectX + config.borderRadius, rectY);
-  ctx.closePath();
-  ctx.fill();
+  drawRoundedRect(ctx, rectX, rectY, rectWidth, rectHeight, config);
 
   // --- 6. 逐行绘制文字 ---
   ctx.fillStyle = config.textColor;
@@ -116,6 +86,36 @@ function drawRectWithText(
   ctx.restore();
 
   return { rectHeight, rectWidth };
+}
+
+function drawRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  config: { bgColor: string; borderRadius: number }
+) {
+  ctx.save();
+  ctx.fillStyle = config.bgColor;
+  ctx.beginPath();
+  ctx.moveTo(x + config.borderRadius, y);
+  ctx.lineTo(x + width - config.borderRadius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + config.borderRadius);
+  ctx.lineTo(x + width, y + height - config.borderRadius);
+  ctx.quadraticCurveTo(
+    x + width,
+    y + height,
+    x + width - config.borderRadius,
+    y + height
+  );
+  ctx.lineTo(x + config.borderRadius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - config.borderRadius);
+  ctx.lineTo(x, y + config.borderRadius);
+  ctx.quadraticCurveTo(x, y, x + config.borderRadius, y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
 }
 
 export { drawRectWithText };

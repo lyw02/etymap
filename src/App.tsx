@@ -1,27 +1,23 @@
 import { useState, useEffect } from "react";
 import Canvas from "./components/Canvas";
-import { GraphNode, GraphEdge } from "./utils/graph.types";
+import { parseGraphStructure } from "./utils/convert-structure";
 
-const graphNodeData = [
-  { label: "PIE" },
-  { label: "Latin" },
-  { label: "French" },
-  { label: "English" },
-];
+const plainTextData = `
+<structure>
+English - Anglo-Norman & Old French & Middle French
+English - Classical Latin 1 - (Classical Latin 2 + Classical Latin 3)
+</structure>
+<content>
+@English: {{spirit}}
+@Anglo-Norman & Old French & Middle French: <Anglo-Norman> {{esperite}} {{espirite}} {{espirith}} {{(rare) spirit}} <Anglo-Norman> <Old French> <Middle French> {{esperit}} {{espirit}} [animating or vital principle, wind, breath, air, action of breathing, divine inspiration, consciousness, emotion, the Holy Spirit, the third person of the Trinity] ({all early 12th cent.}) [intelligence] ({mid 12th cent.}) [imaginary being, fairy] ({mid 12th cent.}) [incorporeal or immaterial being, soul of a dead person, ghost, demon] ({all late 12th cent.}) [angel] ({13th cent.}) [mind as opposed to body] ({late 13th cent. in Anglo-Norman, late 14th cent. in continental French}) [volatile substance] ({early 14th cent. or earlier}) [one or other of four substances so named by medieval alchemists] ({1354}) [rarefied substance believed to be carried in the blood] ({1370}) [disposition of a person, intention, emotional state] ({late 14th cent.}) [deeper meaning of a text] ({late 14th cent.; rare before 1547})
+@Classical Latin 1: {{spīritus}} [(u-stem) action of breathing, respiration, breath, (final) breath, (in grammar) aspiration, air, life, consciousness, soul, vital principle animating the world, divine inspiration, essential quality, nature, disposition, ardent disposition, enthusiasm, vigour, arrogance, pride, wind, breeze, wind in the stomach or bowels, scent, perfume, odour] ((in @(Post-classical Latin) also [the Holy Spirit, evil spirit, demon (Vetus Latina), soul of a dead person, ghost, angel, incorporeal or immaterial being, courage, tendency, inclination, emotional part of a person as the seat of hostile or angry feeling (Vulgate)] [intelligence] ({5th cent.})[ (in plural) morale] ({12th cent. in a British source}) [one or other of four substances so named by medieval alchemists] ({13th cent. in British sources}) [liquid produced by distillation] ({13th cent. in a British source}) [(in spiritus vitae, literally ‘spirit of life’) mercury] ({15th cent. in a British source})))
+@Classical Latin 2: {{spīrāre}} [to breathe]
+@Classical Latin 3: {{‑tus}} [suffix forming verbal nouns]
+</content>
+`;
 
-const graphEdgeData: GraphEdge[] = [
-  { source: "PIE", target: "Latin" },
-  { source: "Latin", target: "English" },
-  { source: "French", target: "English" },
-];
-
-const graphNodes: GraphNode[] = graphNodeData.map(
-  (item) => new GraphNode(item.label)
-);
-
-const graphEdges: GraphEdge[] = graphEdgeData.map(
-  (item) => new GraphEdge(item.source, item.target)
-);
+const { nodes: graphNodes, edges: graphEdges } =
+  parseGraphStructure(plainTextData);
 
 function App() {
   const [isOed, setIsOed] = useState(false);
