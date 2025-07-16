@@ -281,7 +281,7 @@ function handleMouseMove(
   );
 
   if (hoveredNode) {
-    const tooltipText = `节点信息: ${hoveredNode.label}`;
+    const tooltipText = `Node Info: ${hoveredNode.label}`;
     // 在鼠标指针右下方绘制浮窗
     drawRectWithText(ctxRef.current, tooltipText, x + 50, y + 15);
   }
