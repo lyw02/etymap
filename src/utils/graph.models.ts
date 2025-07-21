@@ -1,4 +1,5 @@
 import { drawRectWithText } from "./canvas-utils";
+import { defaultFontConfig } from "./globals";
 import type {
   IGraphNode,
   IGraphEdge,
@@ -71,7 +72,7 @@ class ProcessedNode implements IProcessedNode {
 
     const { rectHeight, rectWidth } = drawRectWithText(
       ctx,
-      text,
+      [{ text, ...defaultFontConfig }],
       x,
       y,
       options

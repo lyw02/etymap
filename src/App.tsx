@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
 import Canvas from "./components/Canvas";
-import { parseGraphStructure } from "./utils/convert-structure";
+import {
+  parseGraphContent,
+  parseGraphStructure,
+} from "./utils/convert-structure";
 
 const plainTextData = `
 <structure>
@@ -18,6 +21,8 @@ English - Classical Latin 1 - (Classical Latin 2 + Classical Latin 3)
 
 const { nodes: graphNodes, edges: graphEdges } =
   parseGraphStructure(plainTextData);
+
+const nodeContents = parseGraphContent(plainTextData);
 
 function App() {
   const [isOed, setIsOed] = useState(false);
@@ -72,7 +77,11 @@ function App() {
           <h1>{headword}</h1>
           <p>{partsOfSpeech}</p>
           {/* {etymologyText} */}
-          <Canvas graphNodes={graphNodes} graphEdges={graphEdges} />
+          <Canvas
+            graphNodes={graphNodes}
+            graphEdges={graphEdges}
+            nodeContents={nodeContents}
+          />
         </>
       ) : (
         <p>No data</p>

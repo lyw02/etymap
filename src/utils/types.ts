@@ -29,4 +29,31 @@ interface IProcessedEdge {
   isHovered: (clientX: number, clientY: number) => boolean;
 }
 
-export type { IGraphNode, IGraphEdge, IProcessedNode, IProcessedEdge };
+type RichTextSpan = {
+  text: string;
+  font: string;
+  size: number;
+  color: string;
+  weight: "normal" | "bold" | "lighter" | number;
+  fontStyle: "normal" | "italic";
+};
+
+type RichTextWordChunk = {
+  text: string;
+  style: Partial<Omit<RichTextSpan, "text">>;
+};
+
+type NodeContent = {
+  label: string;
+  content: RichTextSpan[];
+};
+
+export type {
+  IGraphNode,
+  IGraphEdge,
+  IProcessedNode,
+  IProcessedEdge,
+  RichTextSpan,
+  RichTextWordChunk,
+  NodeContent,
+};

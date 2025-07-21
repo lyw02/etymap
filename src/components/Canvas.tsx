@@ -4,8 +4,10 @@ import {
   GraphEdge,
   ProcessedNode,
   ProcessedEdge,
-} from "../utils/graph.types";
+} from "../utils/graph.models";
 import { drawRectWithText } from "../utils/canvas-utils";
+import type { NodeContent, RichTextSpan } from "../utils/types";
+import { defaultFontConfig } from "../utils/globals";
 
 const LAYER_SPACING = 260; // x-axis spacing between layers
 const NODE_SPACING = 190; // y-axis spacing between nodes in a layer
@@ -85,7 +87,6 @@ function assignLayers(nodes: ProcessedNode[]): ProcessedNode[][] {
     if (!layers[node.layer]) layers[node.layer] = [];
     layers[node.layer].push(node);
   });
-  console.log("111", layers);
   return layers;
 }
 
@@ -257,10 +258,14 @@ function handleMouseMove(
   e: React.MouseEvent<HTMLCanvasElement, MouseEvent>,
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   ctxRef: React.RefObject<CanvasRenderingContext2D | null>,
-  nodesRef: React.RefObject<ProcessedNode[] | null>
+  nodesRef: React.RefObject<ProcessedNode[] | null>,
+  nodesContents: NodeContent[],
+  redrawMainCanvas: () => void
 ) {
   if (!canvasRef.current || !ctxRef.current || !nodesRef.current) return;
 
+  const canvas = canvasRef.current;
+  const ctx = ctxRef.current;
   const x = e.nativeEvent.offsetX;
   const y = e.nativeEvent.offsetY;
 
@@ -273,17 +278,27 @@ function handleMouseMove(
     }
   }
 
-  ctxRef.current.clearRect(
-    0,
-    0,
-    canvasRef.current.width,
-    canvasRef.current.height
-  );
+  // // 清除上层画布（提示层）
+  const dpr = window.devicePixelRatio || 1;
+  ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
 
   if (hoveredNode) {
-    const tooltipText = `Node Info: ${hoveredNode.label}`;
-    // 在鼠标指针右下方绘制浮窗
-    drawRectWithText(ctxRef.current, tooltipText, x + 50, y + 15);
+    let nodeContent: NodeContent | null = null;
+    for (const content of nodesContents) {
+      if (content.label === hoveredNode.label) {
+        nodeContent = content;
+      }
+    }
+    if (nodeContent) {
+      const tooltipText: RichTextSpan[] = nodeContent.content;
+      // 在鼠标指针右下方绘制浮窗
+      drawRectWithText(ctxRef.current, tooltipText, x + 50, y + 15, {
+        maxWidth: 300,
+      });
+    }
+  } else {
+    // 如果没有悬停在任何节点上，需要重绘主画布以清除可能残留的悬停效果
+    // redrawMainCanvas();
   }
 }
 
@@ -301,54 +316,99 @@ function handleMouseLeave(
 function Canvas({
   graphNodes,
   graphEdges,
+  nodeContents,
 }: {
   graphNodes: GraphNode[];
   graphEdges: GraphEdge[];
+  nodeContents: NodeContent[];
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasLayer2Ref = useRef<HTMLCanvasElement>(null);
-  // const ctxRef = useRef<CanvasRenderingContext2D>(null);
+  const ctxRef = useRef<CanvasRenderingContext2D>(null);
   const ctxLayer2Ref = useRef<CanvasRenderingContext2D>(null);
   const nodesRef = useRef<ProcessedNode[]>(null);
+  const edgesRef = useRef<ProcessedEdge[] | null>(null);
 
   useEffect(() => {
+    const container = containerRef.current;
     const canvas = canvasRef.current;
     const canvasLayer2 = canvasLayer2Ref.current;
-    if (!canvas || !canvasLayer2) return;
+    if (!container || !canvas || !canvasLayer2) return;
 
     const ctx = canvas.getContext("2d");
     const ctxLayer2 = canvasLayer2.getContext("2d");
     if (!ctx || !ctxLayer2) return;
+    ctxRef.current = ctx;
     ctxLayer2Ref.current = ctxLayer2;
 
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = 800 * dpr;
-    canvas.height = 500 * dpr;
-    canvasLayer2.width = 800 * dpr;
-    canvasLayer2.height = 500 * dpr;
+    const handleResizeAndDraw = () => {
+      const rect = container.getBoundingClientRect();
 
-    let { nodes, edges } = transformGraph(graphNodes, graphEdges);
-    const layers = assignLayers(nodes);
-    edges = addDummyNodes(layers, nodes, edges);
-    reduceCrossings(layers);
-    assignCoordinates(layers, canvas.width, canvas.height);
-    draw(ctx, nodes, edges);
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      canvasLayer2.width = rect.width * dpr;
+      canvasLayer2.height = rect.height * dpr;
 
-    nodesRef.current = nodes;
+      let { nodes, edges } = transformGraph(graphNodes, graphEdges);
+      const layers = assignLayers(nodes);
+      edges = addDummyNodes(layers, nodes, edges);
+      reduceCrossings(layers);
+      assignCoordinates(layers, canvas.width, canvas.height);
+
+      // 保存节点和边的数据到 refs
+      nodesRef.current = nodes;
+      edgesRef.current = edges;
+
+      draw(ctx, nodes, edges);
+    };
+
+    // 使用 ResizeObserver 监听容器尺寸变化
+    const resizeObserver = new ResizeObserver(handleResizeAndDraw);
+    resizeObserver.observe(container);
+
+    // 初始绘制
+    handleResizeAndDraw();
+
+    // 清理函数：组件卸载时停止监听
+    return () => {
+      resizeObserver.disconnect();
+    };
   }, []);
 
+  function redrawMainCanvasCallback() {
+    if (ctxRef.current && nodesRef.current && edgesRef.current) {
+      draw(ctxRef.current, nodesRef.current, edgesRef.current);
+    }
+  }
+
   return (
-    <div className="relative w-[1000px] h-[500px] bg-gray-50 rounded-lg overflow-hidden shadow-lg">
+    <div
+      className="relative w-full max-w-[1000px] h-[500px] aspect-video mx-auto bg-gray-50 rounded-lg overflow-hidden shadow-lg"
+      ref={containerRef}
+    >
       <canvas
         id="layer-2"
-        className="absolute top-0 left-0 z-20"
+        className="absolute top-0 left-0 z-20 w-full h-full"
         ref={canvasLayer2Ref}
         onMouseMove={(e) =>
-          handleMouseMove(e, canvasLayer2Ref, ctxLayer2Ref, nodesRef)
+          handleMouseMove(
+            e,
+            canvasLayer2Ref,
+            ctxLayer2Ref,
+            nodesRef,
+            nodeContents,
+            redrawMainCanvasCallback
+          )
         }
         onMouseLeave={() => handleMouseLeave(canvasLayer2Ref, ctxLayer2Ref)}
       />
-      <canvas id="layer-1" className="absolute top-0 left-0" ref={canvasRef} />
+      <canvas
+        id="layer-1"
+        className="absolute top-0 left-0 w-full h-full"
+        ref={canvasRef}
+      />
     </div>
   );
 }
