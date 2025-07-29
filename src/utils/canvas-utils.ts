@@ -1,10 +1,10 @@
 import type { RichTextSpan, RichTextWordChunk } from "./types";
 
-function drawRectWithText(
+function calculateRectLayout(
   ctx: CanvasRenderingContext2D,
   textSpans: RichTextSpan[],
-  x: number,
-  y: number,
+  // x: number,
+  // y: number,
   options = {}
 ) {
   ctx.save();
@@ -14,7 +14,7 @@ function drawRectWithText(
     maxWidth: 100,
     padding: 15,
     defaultFont: "Times New Roman",
-    defaultSize: 16,
+    defaultSize: 14,
     defaultWeight: "normal",
     defaultFontStyle: "normal",
     defaultColor: "#111827",
@@ -25,26 +25,26 @@ function drawRectWithText(
   };
 
   const getFontString = (style: RichTextWordChunk["style"]) => {
-  // 从 style 对象中获取各个属性，如果未提供，则使用 config 中的默认值
-  const size = style.size || config.defaultSize;
-  const fontFamily = style.font || config.defaultFont;
-  
-  // 关键改动：直接使用 weight 属性，可以是关键字或数字
-  const weight = style.weight || config.defaultWeight; 
-  
-  // 关键改动：新增 fontStyle 属性来专门控制斜体
-  const fontStyle = style.fontStyle || config.defaultFontStyle; 
+    // 从 style 对象中获取各个属性，如果未提供，则使用 config 中的默认值
+    const size = style.size || config.defaultSize;
+    const fontFamily = style.font || config.defaultFont;
 
-  // 按照 CSS font 属性的正确顺序构建字符串
-  // 顺序: font-style | font-variant | font-weight | font-size/line-height | font-family
-  // 这里我们简化为: style weight size family
-  console.log(`${fontStyle} ${weight} ${size}px ${fontFamily}`)
-  return `${fontStyle} ${weight} ${size}px ${fontFamily}`;
-};
+    // 关键改动：直接使用 weight 属性，可以是关键字或数字
+    const weight = style.weight || config.defaultWeight;
+
+    // 关键改动：新增 fontStyle 属性来专门控制斜体
+    const fontStyle = style.fontStyle || config.defaultFontStyle;
+
+    // 按照 CSS font 属性的正确顺序构建字符串
+    // 顺序: font-style | font-variant | font-weight | font-size/line-height | font-family
+    // 这里我们简化为: style weight size family
+    console.log(`${fontStyle} ${weight} ${size}px ${fontFamily}`);
+    return `${fontStyle} ${weight} ${size}px ${fontFamily}`;
+  };
 
   // --- 2. 预处理文本：将输入片段分解为带样式的单个单词 ---
   const wordChunks: RichTextWordChunk[] = [];
-  console.log("wordChunks", wordChunks)
+  console.log("wordChunks", wordChunks);
   for (const span of textSpans) {
     // 支持用户在文本中通过 '\n' 手动换行
     const paragraphs = span.text.split("\n");
@@ -137,16 +137,84 @@ function drawRectWithText(
   const rectWidth = maxContentWidth + config.padding * 2;
   const rectHeight = totalContentHeight + config.padding * 2;
 
-  // --- 计算矩形左上角坐标（根据中心点）---
-  const rectX = x - rectWidth / 2;
-  const rectY = y - rectHeight / 2;
+  // // --- 计算矩形左上角坐标（根据中心点）---
+  // const rectX = x - rectWidth / 2;
+  // const rectY = y - rectHeight / 2;
 
-  // --- 绘制带圆角的背景矩形 ---
+  // // --- 绘制带圆角的背景矩形 ---
+  // drawRoundedRect(ctx, rectX, rectY, rectWidth, rectHeight, config);
+
+  // // --- 6. 逐行逐块地绘制文字 ---
+  // ctx.textBaseline = "top";
+  // let currentY = rectY + config.padding;
+
+  // for (let i = 0; i < lines.length; i++) {
+  //   const line = lines[i];
+  //   const lineDim = lineDimensions[i];
+  //   let currentX = rectX + config.padding;
+
+  //   for (const chunk of line) {
+  //     const style = chunk.style;
+  //     ctx.font = getFontString(style);
+  //     // ctx.font = "italic 16px Times New Roman";
+  //     ctx.fillStyle = style.color || config.defaultColor;
+
+  //     // 绘制文字
+  //     ctx.fillText(chunk.text, currentX, currentY);
+
+  //     // 更新 X 坐标，准备绘制下一个单词块
+  //     currentX += ctx.measureText(chunk.text + " ").width;
+  //   }
+
+  //   // 更新 Y 坐标，准备绘制下一行
+  //   currentY += lineDim.height;
+  // }
+
+  // ctx.restore();
+
+  return { rectHeight, rectWidth, lines, lineDimensions, config };
+}
+
+/**
+ * 新函数 2: 根据计算好的布局在指定中心点进行绘制
+ */
+function drawRectFromLayout(
+  ctx: CanvasRenderingContext2D,
+  centerX: number,
+  centerY: number,
+  layout: ReturnType<typeof calculateRectLayout>
+) {
+  const { rectWidth, rectHeight, lines, lineDimensions, config } = layout;
+
+  ctx.save();
+
+  const rectX = centerX - rectWidth / 2;
+  const rectY = centerY - rectHeight / 2;
+
+  // 绘制背景矩形
   drawRoundedRect(ctx, rectX, rectY, rectWidth, rectHeight, config);
 
-  // --- 6. 逐行逐块地绘制文字 ---
+  // 绘制文字
   ctx.textBaseline = "top";
   let currentY = rectY + config.padding;
+
+  const getFontString = (style: RichTextWordChunk["style"]) => {
+    // 从 style 对象中获取各个属性，如果未提供，则使用 config 中的默认值
+    const size = style.size || config.defaultSize;
+    const fontFamily = style.font || config.defaultFont;
+
+    // 关键改动：直接使用 weight 属性，可以是关键字或数字
+    const weight = style.weight || config.defaultWeight;
+
+    // 关键改动：新增 fontStyle 属性来专门控制斜体
+    const fontStyle = style.fontStyle || config.defaultFontStyle;
+
+    // 按照 CSS font 属性的正确顺序构建字符串
+    // 顺序: font-style | font-variant | font-weight | font-size/line-height | font-family
+    // 这里我们简化为: style weight size family
+    console.log(`${fontStyle} ${weight} ${size}px ${fontFamily}`);
+    return `${fontStyle} ${weight} ${size}px ${fontFamily}`;
+  };
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -165,14 +233,22 @@ function drawRectWithText(
       // 更新 X 坐标，准备绘制下一个单词块
       currentX += ctx.measureText(chunk.text + " ").width;
     }
-
-    // 更新 Y 坐标，准备绘制下一行
     currentY += lineDim.height;
   }
 
   ctx.restore();
+}
 
-  return { rectHeight, rectWidth };
+function drawRectWithText(
+  ctx: CanvasRenderingContext2D,
+  textSpans: RichTextSpan[],
+  x: number,
+  y: number,
+  options = {}
+) {
+  const layout = calculateRectLayout(ctx, textSpans, options);
+  drawRectFromLayout(ctx, x, y, layout);
+  return { rectHeight: layout.rectHeight, rectWidth: layout.rectWidth };
 }
 
 function drawRoundedRect(
@@ -205,4 +281,4 @@ function drawRoundedRect(
   ctx.restore();
 }
 
-export { drawRectWithText };
+export { drawRectWithText, calculateRectLayout, drawRectFromLayout };

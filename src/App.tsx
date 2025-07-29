@@ -1,9 +1,12 @@
-import { useState, useEffect } from "react";
-import Canvas from "./components/Canvas";
+import { useState, useEffect, useRef } from "react";
+import Canvas from "@/components/Canvas";
 import {
   parseGraphContent,
   parseGraphStructure,
-} from "./utils/convert-structure";
+} from "@/utils/convert-structure";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 
 const plainTextData = `
 <structure>
@@ -31,6 +34,12 @@ function App() {
   const [etymologyText, setEtymologyText] = useState(
     "Loading data from page..."
   );
+  const [progress, setProgress] = useState(0);
+  const [downloadStatus, setDownloadStatus] = useState("");
+  const [infRes, setInfRes] = useState("");
+
+  const downloadButtonRef = useRef<HTMLButtonElement>(null);
+  const downloadProgressBarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // 1. 查询当前激活的标签页
@@ -46,7 +55,7 @@ function App() {
           // 2. 向该标签页的 Content Script 发送消息
           chrome.tabs.sendMessage(
             activeTab.id,
-            { type: "GET_ETY_TEXT_FROM_CONTENT" }, // 我们定义的消息体
+            { type: "getPageContent" }, // 我们定义的消息体
             (response) => {
               // 3. 这是处理响应的回调函数
               // 检查响应是否有效
@@ -60,6 +69,18 @@ function App() {
                 setHeadword(response.headword);
                 setPartsOfSpeech(response.partsOfSpeech);
                 setEtymologyText(response.data);
+                // 将获取到的内容发送到 Background Script 进行推理
+                // chrome.runtime.sendMessage(
+                //   { action: "infer", text: `${response.data}` },
+                //   (inferenceResponse) => {
+                //     if (inferenceResponse.error) {
+                //       //
+                //     } else {
+                //       console.log("===============", inferenceResponse.result)
+                //       setInfRes(inferenceResponse.result);
+                //     }
+                //   }
+                // );
               } else {
                 setEtymologyText("No data received from content script.");
               }
@@ -70,22 +91,98 @@ function App() {
     });
   }, []);
 
+  useEffect(() => {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (!downloadButtonRef.current || !downloadProgressBarRef.current) return;
+
+      if (message.action === "downloadProgress") {
+        downloadProgressBarRef.current.style.display = "block";
+        setDownloadStatus(message.message);
+
+        switch (message.status) {
+          case "downloading":
+            setProgress(message.progress);
+            downloadButtonRef.current.disabled = true;
+            break;
+          case "complete":
+            setProgress(100);
+            downloadButtonRef.current.disabled = false;
+            setDownloadStatus("Download complete");
+            break;
+          case "error":
+            setDownloadStatus(`Error: ${message.message}`);
+            downloadProgressBarRef.current.style.display = "none";
+            downloadButtonRef.current.disabled = false;
+            break;
+        }
+      }
+    });
+  }, []);
+
+  function handleDownloadModel() {
+    if (!downloadButtonRef.current || !downloadProgressBarRef.current) return;
+
+    setDownloadStatus("Starting download...");
+    downloadButtonRef.current.disabled = true;
+    downloadProgressBarRef.current.style.display = "block";
+    setProgress(0);
+
+    // 发送开始下载的消息
+    chrome.runtime.sendMessage({ action: "downloadModel" });
+
+    // chrome.runtime.sendMessage({ action: "downloadModel" }, (response) => {
+    //   if (response && response.status === "success") {
+    //     setDownloadStatus(response.message);
+    //   } else {
+    //     setDownloadStatus(`Error: ${response.message}`);
+    //   }
+
+    //   if (!downloadButtonRef.current) return;
+    //   downloadButtonRef.current.disabled = false;
+    // });
+  }
+
   return (
-    <div className="max-w-[1280px] p-8 m-auto">
-      {isOed ? (
-        <>
-          <h1>{headword}</h1>
-          <p>{partsOfSpeech}</p>
-          {/* {etymologyText} */}
-          <Canvas
-            graphNodes={graphNodes}
-            graphEdges={graphEdges}
-            nodeContents={nodeContents}
+    <div className="w-[1280px] p-8 m-auto">
+      <Tabs defaultValue="graph-view" className="w-full">
+        <TabsList>
+          <TabsTrigger value="graph-view">Graph View</TabsTrigger>
+          <TabsTrigger value="model">Model</TabsTrigger>
+        </TabsList>
+        <TabsContent value="graph-view">
+          {isOed ? (
+            <>
+              <h1>{headword}</h1>
+              <p>{partsOfSpeech}</p>
+              {/* {etymologyText} */}
+              <Canvas
+               graphNodes={graphNodes}
+               graphEdges={graphEdges}
+               nodeContents={nodeContents}
+                // graphNodes={parseGraphStructure(infRes).nodes}
+                // graphEdges={parseGraphStructure(infRes).edges}
+                // nodeContents={parseGraphContent(infRes)}
+              />
+            </>
+          ) : (
+            <p>No data</p>
+          )}
+        </TabsContent>
+        <TabsContent value="model">
+          <Button
+            variant="outline"
+            onClick={handleDownloadModel}
+            ref={downloadButtonRef}
+          >
+            Download Model
+          </Button>
+          <Progress
+            value={progress}
+            className="w-50 my-3"
+            ref={downloadProgressBarRef}
           />
-        </>
-      ) : (
-        <p>No data</p>
-      )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

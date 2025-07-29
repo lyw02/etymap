@@ -37,7 +37,7 @@ const finalConcatenatedString = allFoundTexts.join(" ").trim();
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // 检查消息的类型，确保是我们想要处理的请求
-  if (request.type === "GET_ETY_TEXT_FROM_CONTENT") {
+  if (request.type === "getPageContent") {
     console.log("Content script received a message from popup.");
 
     // 将我们已经计算好的字符串作为响应发送回去

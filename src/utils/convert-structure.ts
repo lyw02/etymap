@@ -93,15 +93,28 @@ function parseGraphContent(plainText: string): NodeContent[] {
       font: "Times New Roman",
       weight: "normal",
       fontStyle: "normal",
-      size: 16,
+      size: 14,
       color: "#000000",
     };
     const styleStack: RichTextSpan[] = [baseStyle];
 
+    let processedContent = contentString
+      .replace(/>\s*</g, "> & <") // <> 和 <> 之间用 ' & '
+      .replace(/\}\}\s*\{\{/g, "}} {{"); // {{}} 和 {{}} 之间用 ' '
+
     // 2. 新的分词正则表达式：它会切分字符串，并保留所有的标记作为独立的词元
-    const tokens = contentString
-      .split(/(\{\{|\}\}|<|>|\(\(|\)\)|@\(|\)|\({|}|\[|\])/g)
+    const tokens = processedContent
+      .split(/(\{\{|\}\}|<|>|\(\(|\)\)|@\(|\)|\({|}\)|\[|\])/g)
       .filter(Boolean); // filter(Boolean) 用于移除分割产生的空字符串
+
+    // --- 新增(2): 使用新的、更清晰的状态机 ---
+    // 'start': 内容开始
+    // 'opening': 上一个有意义的词元是开标签
+    // 'closing': 上一个有-意义的词元是闭标签
+    // 'text':    上一个有意义的词元是文本
+    let lastSignificantTokenType: "start" | "opening" | "closing" | "text" =
+      "start";
+    let lastOpeningToken = "";
 
     // 3. 遍历所有词元（包括标记和文本）
     for (const token of tokens) {
@@ -110,36 +123,71 @@ function parseGraphContent(plainText: string): NodeContent[] {
       switch (token) {
         // --- 处理开启标记 ---
         case "<":
-        case "@(":
-          // 继承当前样式，并修改 weight，然后压入栈
-          styleStack.push({ ...currentStyle, weight: "bold" });
-          break;
         case "{{":
-          styleStack.push({ ...currentStyle, fontStyle: "italic" });
-          break;
-        case "((":
-          styleStack.push({ ...currentStyle, weight: "lighter" });
-          break;
-        case "({":
-          styleStack.push({ ...currentStyle, weight: 100 });
-          break;
         case "[":
-          // [ ] 标记不改变样式，但我们依然需要一个占位的栈层级
-          styleStack.push({ ...currentStyle });
+        // case "@(": // @( 也视为一种开标签
+        case "((":
+        case "({":
+          // --- 新增(3): 全新的换行判断逻辑 ---
+          // 如果上一个有意义的词元是“闭标签”，则在此“开标签”前换行
+          if (
+            lastSignificantTokenType === "closing" &&
+            (token === "{{" ||
+              token === "[" ||
+              (token === "<" && lastOpeningToken !== "<"))
+          ) {
+            const styleForNewline = styleStack[styleStack.length - 1];
+            generatedSpans.push({ ...styleForNewline, text: "\n" });
+          }
+
+          if (token === "[") {
+            const styleForNewline = styleStack[styleStack.length - 1];
+            generatedSpans.push({ ...styleForNewline, text: "- " });
+          }
+
+          if (token === "({") {
+            const styleForNewline = styleStack[styleStack.length - 1];
+            generatedSpans.push({ ...styleForNewline, text: " (" });
+          }
+
+          // 应用样式
+          if (
+            token === "<"
+            // || token === "@("
+          ) {
+            styleStack.push({ ...currentStyle, weight: "bold" });
+          } else if (token === "{{") {
+            styleStack.push({ ...currentStyle, fontStyle: "italic" });
+          } else if (token === "((") {
+            styleStack.push({ ...currentStyle, weight: "lighter" });
+          } else if (token === "({") {
+            styleStack.push({ ...currentStyle, weight: 100 });
+          } else if (token === "[") {
+            styleStack.push({ ...currentStyle });
+          }
+
+          // 更新状态
+          lastSignificantTokenType = "opening";
+          lastOpeningToken = token;
           break;
 
         // --- 处理闭合标记 ---
         case ">":
-        case ")":
         case "}}":
         case "))":
         case "})":
         case "]":
-          // 弹出一个样式，回到上一层
           if (styleStack.length > 1) {
-            // 保证基础样式不会被弹出
             styleStack.pop();
           }
+
+          if (token === "})") {
+            const styleForNewline = styleStack[styleStack.length - 1];
+            generatedSpans.push({ ...styleForNewline, text: ") " });
+          }
+
+          // 更新状态
+          lastSignificantTokenType = "closing";
           break;
 
         // --- 处理纯文本 ---

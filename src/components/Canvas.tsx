@@ -1,16 +1,22 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   GraphNode,
   GraphEdge,
   ProcessedNode,
   ProcessedEdge,
 } from "../utils/graph.models";
-import { drawRectWithText } from "../utils/canvas-utils";
+import {
+  calculateRectLayout,
+  drawRectFromLayout,
+  drawRectWithText,
+} from "../utils/canvas-utils";
 import type { NodeContent, RichTextSpan } from "../utils/types";
-import { defaultFontConfig } from "../utils/globals";
 
 const LAYER_SPACING = 260; // x-axis spacing between layers
 const NODE_SPACING = 190; // y-axis spacing between nodes in a layer
+const GRAPH_PADDING = 100;
+const TOOLTIP_GAP = 0; // 节点和提示框之间的距离
+const TOOLTIP_MAX_WIDTH = 400; // 与 drawRectWithText 中的 maxWidth 保持一致
 
 function transformGraph(
   graphNodes: GraphNode[],
@@ -260,7 +266,9 @@ function handleMouseMove(
   ctxRef: React.RefObject<CanvasRenderingContext2D | null>,
   nodesRef: React.RefObject<ProcessedNode[] | null>,
   nodesContents: NodeContent[],
-  redrawMainCanvas: () => void
+  // redrawMainCanvas: () => void
+  extraHeight: number,
+  setExtraHeight: React.Dispatch<React.SetStateAction<number>>
 ) {
   if (!canvasRef.current || !ctxRef.current || !nodesRef.current) return;
 
@@ -283,22 +291,108 @@ function handleMouseMove(
   ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
 
   if (hoveredNode) {
-    let nodeContent: NodeContent | null = null;
-    for (const content of nodesContents) {
-      if (content.label === hoveredNode.label) {
-        nodeContent = content;
-      }
-    }
+    // let nodeContent: NodeContent | null = null;
+    // for (const content of nodesContents) {
+    //   if (content.label === hoveredNode.label) {
+    //     nodeContent = content;
+    //   }
+    // }
+    const nodeContent = nodesContents.find(
+      (c) => c.label === hoveredNode.label
+    );
+
     if (nodeContent) {
-      const tooltipText: RichTextSpan[] = nodeContent.content;
-      // 在鼠标指针右下方绘制浮窗
-      drawRectWithText(ctxRef.current, tooltipText, x + 50, y + 15, {
-        maxWidth: 300,
+      // const tooltipText: RichTextSpan[] = nodeContent.content;
+
+      // // 计算内容框位置
+      // const canvasWidth = canvas.width;
+      // const nodeRightEdge = hoveredNode.x + hoveredNode.nodeWidth / 2;
+
+      // let tooltipCenterX;
+      // const tooltipCenterY = hoveredNode.y; // 垂直方向与节点中心对齐
+
+      // // 检查右侧空间是否足够
+      // if (canvasWidth - nodeRightEdge >= TOOLTIP_MAX_WIDTH + TOOLTIP_GAP) {
+      //   // 空间充足，放右边
+      //   // 提示框中心X = 节点右边缘 + 间距 + 提示框宽度的一半
+      //   tooltipCenterX = nodeRightEdge + TOOLTIP_GAP + TOOLTIP_MAX_WIDTH / 2;
+      // } else {
+      //   // 空间不足，放左边
+      //   const nodeLeftEdge = hoveredNode.x - hoveredNode.nodeWidth / 2;
+      //   // 提示框中心X = 节点左边缘 - 间距 - 提示框宽度的一半
+      //   tooltipCenterX = nodeLeftEdge - TOOLTIP_GAP - TOOLTIP_MAX_WIDTH / 2;
+      // }
+
+      // // 在计算好的位置绘制浮窗
+      // drawRectWithText(ctx, tooltipText, tooltipCenterX, tooltipCenterY, {
+      //   maxWidth: TOOLTIP_MAX_WIDTH,
+      // });
+      // --- 1. 计算 Tooltip 布局 ---
+      const tooltipLayout = calculateRectLayout(ctx, nodeContent.content, {
+        maxWidth: TOOLTIP_MAX_WIDTH,
       });
+      const { rectHeight: tooltipHeight, rectWidth: tooltipWidth } =
+        tooltipLayout;
+
+      // --- 2. 计算水平位置 (X-axis) ---
+      const canvasWidth = canvas.width;
+      const nodeRightEdge = hoveredNode.x + hoveredNode.nodeWidth / 2;
+      let tooltipCenterX;
+      if (canvasWidth - nodeRightEdge >= tooltipWidth + TOOLTIP_GAP) {
+        tooltipCenterX = nodeRightEdge + TOOLTIP_GAP + tooltipWidth / 2;
+      } else {
+        const nodeLeftEdge = hoveredNode.x - hoveredNode.nodeWidth / 2;
+        tooltipCenterX = nodeLeftEdge - TOOLTIP_GAP - tooltipWidth / 2;
+      }
+
+      // --- 3. 计算垂直位置 (Y-axis) ---
+      const canvasHeight = canvas.height;
+      const nodeTop = hoveredNode.y - hoveredNode.nodeHeight / 2;
+      const nodeBottom = hoveredNode.y + hoveredNode.nodeHeight / 2;
+      let finalTooltipCenterY;
+
+      // 策略 1: 优先尝试将 Tooltip 的上边缘与节点的上边缘对齐
+      const topAlignedCenterY = nodeTop + tooltipHeight / 2;
+      if (
+        topAlignedCenterY + tooltipHeight / 2 <=
+        canvasHeight - GRAPH_PADDING
+      ) {
+        finalTooltipCenterY = topAlignedCenterY;
+      } else {
+        // 策略 2: 如果策略1导致溢出，则尝试将 Tooltip 的下边缘与节点的下边缘对齐
+        const bottomAlignedCenterY = nodeBottom - tooltipHeight / 2;
+        if (bottomAlignedCenterY - tooltipHeight / 2 >= GRAPH_PADDING) {
+          finalTooltipCenterY = bottomAlignedCenterY;
+        } else {
+          // 策略 3: 如果两种对齐方式都溢出，则需要扩展画布
+          // 计算需要的额外高度
+          const availableHeight = canvasHeight - GRAPH_PADDING * 2;
+          const neededExtra = tooltipHeight - availableHeight;
+
+          if (neededExtra > 0 && neededExtra > extraHeight) {
+            // 触发 React re-render 来扩展画布
+            setExtraHeight(neededExtra);
+          }
+          // 在当前帧，我们仍然把它放在顶部对齐的位置，下一帧渲染时就会修正
+          finalTooltipCenterY = topAlignedCenterY;
+        }
+      }
+
+      // --- 4. 绘制 Tooltip ---
+      drawRectFromLayout(
+        ctx,
+        tooltipCenterX,
+        finalTooltipCenterY,
+        tooltipLayout
+      );
     }
   } else {
     // 如果没有悬停在任何节点上，需要重绘主画布以清除可能残留的悬停效果
     // redrawMainCanvas();
+    // 如果没有悬停在任何节点上，并且画布被扩展了，则恢复
+    if (extraHeight > 0) {
+      setExtraHeight(0);
+    }
   }
 }
 
@@ -322,6 +416,8 @@ function Canvas({
   graphEdges: GraphEdge[];
   nodeContents: NodeContent[];
 }) {
+  const [extraHeight, setExtraHeight] = useState(0); // 新增 state
+
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const canvasLayer2Ref = useRef<HTMLCanvasElement>(null);
@@ -346,15 +442,38 @@ function Canvas({
       const rect = container.getBoundingClientRect();
 
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      canvasLayer2.width = rect.width * dpr;
-      canvasLayer2.height = rect.height * dpr;
+      // canvas.width = rect.width * dpr;
+      // canvas.height = rect.height * dpr;
+      // canvasLayer2.width = rect.width * dpr;
+      // canvasLayer2.height = rect.height * dpr;
 
       let { nodes, edges } = transformGraph(graphNodes, graphEdges);
       const layers = assignLayers(nodes);
       edges = addDummyNodes(layers, nodes, edges);
       reduceCrossings(layers);
+
+      // 计算图形所需的理论尺寸
+      const graphWidth =
+        layers.length > 0 ? (layers.length - 1) * LAYER_SPACING : 0;
+      const maxNodesInLayer = layers.reduce(
+        (max, layer) => Math.max(max, layer.length),
+        0
+      );
+      const graphHeight =
+        maxNodesInLayer > 0 ? (maxNodesInLayer - 1) * NODE_SPACING : 0;
+
+      const finalWidth = graphWidth + GRAPH_PADDING * 2;
+      const finalHeight = graphHeight + GRAPH_PADDING * 2 + extraHeight;
+
+      canvas.width = finalWidth * dpr;
+      canvas.height = finalHeight * dpr;
+      canvasLayer2.width = finalWidth * dpr;
+      canvasLayer2.height = finalHeight * dpr;
+
+      // 更新容器的样式，使其匹配 Canvas 的 CSS 尺寸
+      container.style.width = `${finalWidth}px`;
+      container.style.height = `${finalHeight}px`;
+
       assignCoordinates(layers, canvas.width, canvas.height);
 
       // 保存节点和边的数据到 refs
@@ -375,7 +494,7 @@ function Canvas({
     return () => {
       resizeObserver.disconnect();
     };
-  }, []);
+  }, [graphNodes, graphEdges]);
 
   function redrawMainCanvasCallback() {
     if (ctxRef.current && nodesRef.current && edgesRef.current) {
@@ -399,7 +518,9 @@ function Canvas({
             ctxLayer2Ref,
             nodesRef,
             nodeContents,
-            redrawMainCanvasCallback
+            // redrawMainCanvasCallback
+            extraHeight, // 传递 state
+            setExtraHeight // 传递 state 设置函数
           )
         }
         onMouseLeave={() => handleMouseLeave(canvasLayer2Ref, ctxLayer2Ref)}
